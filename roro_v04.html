@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lyrics Shell - Jellybeans</title>
+    
+    <!-- D2Coding 폰트 웹폰트 적용 -->
+    <link href="http://cdn.jsdelivr.net/gh/joungkyun/font-d2coding/d2coding.css" rel="stylesheet">
+
+    <style>
+        /* 젤리빈즈(Jellybeans) 테마 색상 정의 */
+        :root {
+            --bg-color: #151515;       /* 배경: 짙은 회색 */
+            --fg-color: #e8e8d3;       /* 기본 글자: 아이보리/회색 */
+            --cursor-color: #8fbfdc;   /* 커서: 연한 파랑 */
+            --prompt-user: #fad07a;    /* 프롬프트 유저명: 노랑/골드 */
+            --prompt-sep: #888888;     /* 프롬프트 구분자: 회색 */
+            --prompt-sym: #ffb964;     /* 프롬프트 심볼: 주황 */
+            --typing-color: #e88554;   /* 현재 타이핑 중인 색 (요청하신 색상 유지) */
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            font-family: 'D2Coding', monospace; /* D2Coding 적용 */
+            font-size: 16px;
+            line-height: 1.6;
+            overflow-y: auto; /* 내용이 길어지면 스크롤 */
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* 터미널 전체 컨테이너 */
+        #terminal {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            padding-bottom: 50px; /* 하단 여백 확보 */
+        }
+
+        /* 각 줄 (Line) */
+        .line {
+            display: flex; /* 프롬프트와 내용을 가로 배치 */
+            align-items: flex-start;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+
+        /* 프롬프트 스타일 (0+0@roro >> $) */
+        .prompt {
+            white-space: pre; /* 공백 유지 */
+            margin-right: 10px;
+            flex-shrink: 0; /* 줄어들지 않음 */
+        }
+        .p-user { color: #8197bf; } /* roro 부분 (보라/파랑 계열) */
+        .p-sep { color: #555555; }  /* >> 부분 */
+        .p-sym { color: #99ad6a; }  /* $ 부분 (초록 계열) */
+
+        /* 텍스트 내용 */
+        .content {
+            flex-grow: 1;
+        }
+
+        /* 타이핑 완료된 텍스트 */
+        .completed {
+            color: var(--fg-color);
+        }
+
+        /* 현재 타이핑 중인 글자 */
+        .current {
+            color: var(--typing-color);
+            font-weight: bold;
+        }
+
+        /* 블록 커서 깜빡임 */
+        .cursor-block {
+            display: inline-block;
+            width: 0.6em;
+            height: 1.2em;
+            background-color: var(--typing-color); /* 커서도 주황색 계열로 */
+            vertical-align: middle;
+            animation: blink 0.9s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* 모바일 대응 */
+        @media (max-width: 480px) {
+            body { padding: 10px; font-size: 14px; }
+            .prompt { margin-right: 5px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="terminal">
+    <!-- 자바스크립트로 줄이 추가됩니다 -->
+</div>
+
+<script>
+    // 가사 데이터 (줄바꿈 단위)
+    const rawLyrics = `검은 눈동자의 사각지대를 찾으러 가자
+여름 코코아 겨울 수박도 혼나지 않는 파라다이스
+앞서가는 너의 머리가 두 볼을 간지럽힐 때 나의 내일이 뛰어오네
+
+난 널 버리지 않아 너도 같은 생각이지?
+저 너머의 우리는 결코 우리가 될 수 없단다
+
+영생과 영면의 차이를 너는 알고 있니
+멍든 발목을 꺾으려 해도 망설임 없이 태어나는 꿈
+
+난 널 버리지 않아 너도 같은 생각이지?
+저 너머의 우리는 결코 우리가 될 수 없단다
+
+난 널 버리지 않아 너도 같은 생각이지?
+난 우리를 영영 잃지 않아 너도 영영 그럴 거지?`;
+
+    const lines = rawLyrics.split('\n');
+    const terminal = document.getElementById('terminal');
+
+    // 프롬프트 HTML 조각 (반복 사용)
+    const promptHTML = `<span class="prompt"><span class="p-user">0+0@roro</span> <span class="p-sep">>></span> <span class="p-sym">$</span></span>`;
+
+    // ==========================================
+    // [설정] 속도 조절은 여기서 하세요
+    // ==========================================
+    const CONFIG = {
+        baseSpeed: 50,      // 기본 타이핑 속도 (낮을수록 빠름, ms)
+        randomness: 40,     // 랜덤 지연 범위 (0 ~ 이 값 사이의 랜덤 추가)
+        spaceDelay: 50,     // 띄어쓰기 만났을 때 추가 지연
+        lineDelay: 600,     // 한 줄 다 치고 다음 줄 넘어갈 때 대기 시간
+        startDelay: 1000    // 페이지 로드 후 첫 시작 대기 시간
+    };
+
+    let lineIdx = 0;
+    let charIdx = 0;
+    let currentLineDiv = null;  // 현재 작업 중인 .line div
+    let contentSpan = null;     // 현재 글자가 찍히는 .content span
+
+    // 새 줄을 만드는 함수 (프롬프트 포함)
+    function createNewLine() {
+        const div = document.createElement('div');
+        div.className = 'line';
+        
+        // 프롬프트 추가
+        div.innerHTML = promptHTML;
+
+        // 텍스트가 들어갈 span 추가
+        const content = document.createElement('span');
+        content.className = 'content';
+        div.appendChild(content);
+
+        terminal.appendChild(div);
+        
+        // 화면 최하단으로 스크롤 이동
+        window.scrollTo(0, document.body.scrollHeight);
+
+        return content;
+    }
+
+    function typeWriter() {
+        if (lineIdx >= lines.length) {
+            // 모든 가사 종료 시 마지막 커서 제거
+            if (contentSpan) {
+                const oldHTML = contentSpan.innerHTML;
+                contentSpan.innerHTML = oldHTML.replace('<span class="cursor-block"></span>', '');
+            }
+            return;
+        }
+
+        const textLine = lines[lineIdx];
+
+        // 1. 새로운 줄 시작 (첫 글자일 때)
+        if (charIdx === 0) {
+            // 이전 줄의 커서 제거
+            if (currentLineDiv && contentSpan) {
+                // 이전 줄을 '완료된 상태' 색상(흰색/회색)으로 변경하고 싶다면 클래스 변경
+                // 여기서는 CSS .completed가 기본이므로, 주황색 글자를 제거하고 plain text로 변경
+                // (현재 코드상 .current 클래스만 주황색이므로, 그냥 텍스트로 두면 됨)
+                const cleanText = contentSpan.innerText; 
+                contentSpan.innerHTML = `<span class="completed">${cleanText}</span>`; 
+            }
+
+            // 빈 줄인 경우 (엔터만 있는 곳)
+            if (textLine.trim() === '') {
+                createNewLine(); // 빈 프롬프트 한 줄 출력
+                lineIdx++;
+                setTimeout(typeWriter, CONFIG.lineDelay / 2); // 빈 줄은 조금 빨리
+                return;
+            }
+
+            // 새 줄 생성 및 타겟 설정
+            contentSpan = createNewLine();
+            currentLineDiv = contentSpan.parentElement;
+        }
+
+        // 2. 글자 타이핑
+        const completedText = textLine.substring(0, charIdx);
+        const currentChar = textLine.charAt(charIdx);
+
+        // HTML 조립: [완료된글자들] + [현재글자(주황)] + [커서블록]
+        contentSpan.innerHTML = `<span class="completed">${completedText}</span><span class="current">${currentChar}</span><span class="cursor-block"></span>`;
+        
+        // 스크롤 따라가기
+        window.scrollTo(0, document.body.scrollHeight);
+
+        charIdx++;
+
+        // 3. 다음 동작 결정
+        if (charIdx > textLine.length) {
+            // 이 줄 완료
+            lineIdx++;
+            charIdx = 0;
+            setTimeout(typeWriter, CONFIG.lineDelay);
+        } else {
+            // 다음 글자 타이핑
+            let speed = CONFIG.baseSpeed + Math.random() * CONFIG.randomness;
+            if (currentChar === ' ') speed += CONFIG.spaceDelay; // 띄어쓰기는 좀 더 김
+
+            setTimeout(typeWriter, speed);
+        }
+    }
+
+    // 시작
+    window.onload = () => {
+        setTimeout(typeWriter, CONFIG.startDelay);
+    };
+</script>
+
+</body>
+</html>
