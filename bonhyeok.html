@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>bonhyeok_song</title>
+    
+    <!-- D2Coding 폰트 -->
+    <link href="http://cdn.jsdelivr.net/gh/joungkyun/font-d2coding/d2coding.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #151515;
+            --fg-color: #dedede;
+            --prompt-user: #fad07a;
+            --prompt-sep: #888888;
+            --prompt-sym: #ffb964;
+            --typing-color: #e88554;
+            /* 안전 영역 + 기본 여백 60px 추가 */
+            --safe-top: calc(env(safe-area-inset-top) + 60px); 
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            overflow: hidden; /* body 자체 스크롤 방지 */
+            font-family: 'D2Coding', monospace;
+        }
+
+        /* 
+           화면 전체 컨테이너 (overflow-y: auto)
+        */
+        #terminal-container {
+            width: 100%;
+            height: 100dvh; /* 모바일 주소창 대응 높이 */
+            overflow-y: auto; /* 내부 스크롤 */
+            box-sizing: border-box;
+          
+            padding-top: var(--safe-top);
+            padding-left: 20px;
+            padding-right: 20px;
+            padding-bottom: 100px; /* 하단 여백 넉넉히 */
+        }
+
+        #terminal-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .line {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 6px;
+            word-break: break-all;
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--fg-color);
+        }
+
+        /* 프롬프트 스타일 */
+        .prompt {
+            white-space: pre;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .p-user { color: #8197bf; }
+        .p-sep { color: #555555; }
+        .p-sym { color: #99ad6a; }
+
+        .content {
+            flex-grow: 1;
+        }
+
+        .completed { color: var(--fg-color); }
+        .current { color: var(--typing-color); font-weight: bold; }
+
+        .cursor-block {
+            display: inline-block;
+            width: 0.6em;
+            height: 1.2em;
+            background-color: var(--typing-color);
+            vertical-align: middle;
+            animation: blink 0.9s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        @media (max-width: 480px) {
+            .line { font-size: 14px; }
+            #terminal-container { padding-left: 15px; padding-right: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 스크롤을 담당할 외부 컨테이너 -->
+<div id="terminal-container">
+    <!-- 실제 텍스트가 쌓이는 내부 컨테이너 -->
+    <div id="terminal-content"></div>
+</div>
+
+<script>
+    // 가사
+    const rawLyrics = `./bonhyeok
+당^차고 시^^^원하게^ 달려라 L^G 구본혁
+언제나 너! ^^의 옆에 우리가 함^^^께~^
+당차고 시^^^원하게^날려라 L^G 구본혁
+언제나 너!^^영원^히^^^사랑할게~`;
+
+    const lines = rawLyrics.split('\n');
+    const container = document.getElementById('terminal-container'); // 스크롤 할 대상
+    const contentBox = document.getElementById('terminal-content');  // 텍스트 넣을 대상
+
+    const promptHTML = `<span class="prompt"><span class="p-user">0+0@roro</span> <span class="p-sep">>></span> <span class="p-sym">$</span></span>`;
+
+    const CONFIG = {
+        baseSpeed: 50,      
+        randomness: 40,     
+        spaceDelay: 50,     
+        lineDelay: 600,     
+        startDelay: 1000,   
+        delayMarkerChar: '^',
+        delayMarkerTime: 200 
+    };
+
+    let lineIdx = 0;
+    let charIdx = 0;
+    let currentLineDiv = null;
+    let contentSpan = null;
+
+    // 자동 스크롤 함수
+    function scrollToBottom() {
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function createNewLine(index) {
+        const div = document.createElement('div');
+        div.className = 'line';
+        
+        // [첫 번째 줄에만 프롬프트 표시]
+        if (index === 0) {
+            div.innerHTML = promptHTML; 
+        }
+
+        const content = document.createElement('span');
+        content.className = 'content';
+        div.appendChild(content);
+
+        contentBox.appendChild(div);
+        
+        scrollToBottom();
+
+        return content;
+    }
+
+    function getCleanText(str) {
+        return str.split(CONFIG.delayMarkerChar).join('');
+    }
+
+    function typeWriter() {
+        if (lineIdx >= lines.length) {
+            if (contentSpan) {
+                const oldHTML = contentSpan.innerHTML;
+                contentSpan.innerHTML = oldHTML.replace('<span class="cursor-block"></span>', '');
+            }
+            return;
+        }
+
+        const rawLine = lines[lineIdx];
+        
+        if (charIdx === 0) {
+            // 이전 줄 커서 정리
+            if (currentLineDiv && contentSpan) {
+                const cleanOnly = getCleanText(contentSpan.innerText);
+                contentSpan.innerHTML = `<span class="completed">${cleanOnly}</span>`;
+            }
+
+            // 빈 줄 처리
+            if (rawLine.trim() === '') {
+                createNewLine(lineIdx);
+                lineIdx++;
+                setTimeout(typeWriter, CONFIG.lineDelay / 2);
+                return;
+            }
+
+            contentSpan = createNewLine(lineIdx);
+            currentLineDiv = contentSpan.parentElement;
+        }
+
+        const currentChar = rawLine.charAt(charIdx);
+
+        // 지연 문자 처리
+        if (currentChar === CONFIG.delayMarkerChar) {
+            charIdx++;
+            setTimeout(typeWriter, CONFIG.delayMarkerTime);
+            return; 
+        }
+
+        const textUpToNow = rawLine.substring(0, charIdx);
+        const cleanCompleted = getCleanText(textUpToNow);
+        
+        contentSpan.innerHTML = `<span class="completed">${cleanCompleted}</span><span class="current">${currentChar}</span><span class="cursor-block"></span>`;
+        
+        scrollToBottom();
+
+        charIdx++;
+
+        if (charIdx > rawLine.length) {
+            lineIdx++;
+            charIdx = 0;
+            setTimeout(typeWriter, CONFIG.lineDelay);
+        } else {
+            let speed = CONFIG.baseSpeed + Math.random() * CONFIG.randomness;
+            if (currentChar === ' ') speed += CONFIG.spaceDelay;
+            setTimeout(typeWriter, speed);
+        }
+    }
+
+    window.onload = () => {
+        setTimeout(typeWriter, CONFIG.startDelay);
+    };
+</script>
+
+</body>
+</html>
