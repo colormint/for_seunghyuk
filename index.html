@@ -3,11 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Lyrics Shell</title>
+    <title>Lyrics Shell - Index Fixed</title>
     
     <link href="http://cdn.jsdelivr.net/gh/joungkyun/font-d2coding/d2coding.css" rel="stylesheet">
 
     <style>
+        /* 초기화 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         :root {
             --bg-color: #151515;
             --fg-color: #dedede;
@@ -15,36 +22,25 @@
             --prompt-sep: #888888;
             --prompt-sym: #ffb964;
             --typing-color: #e88554;
-            --link-color: #8197bf; /* 링크 색상 추가 */
+            --link-color: #8197bf;
+            --meta-color: #555555;
             --safe-top: calc(env(safe-area-inset-top) + 60px); 
         }
 
         html, body {
-            margin: 0;
-            padding: 0;
             width: 100%;
             height: 100%;
             background-color: var(--bg-color);
             overflow: hidden;
             font-family: 'D2Coding', monospace;
+            display: block; 
+            text-align: left; 
         }
 
-        /* 링크 스타일 추가: 터미널 느낌 나게 */
-        a {
-            color: var(--link-color);
-            text-decoration: none;
-            margin-right: 20px; /* 링크 사이 간격 */
-        }
-        a:hover {
-            text-decoration: underline;
-            color: var(--typing-color);
-        }
-
-      #terminal-container {
+        #terminal-container {
             width: 100%;
             height: 100dvh;
             overflow-y: auto;
-            box-sizing: border-box;
             padding-top: var(--safe-top);
             padding-left: 20px;
             padding-right: 20px;
@@ -52,43 +48,89 @@
         }
 
         #terminal-content {
-            max-width: 800px;
-            margin: 0 auto;
+            width: 100%;
+            text-align: left;
         }
 
+        /* 한 줄 레이아웃 강제 */
         .line {
-            display: flex;
-            align-items: flex-start;
+            display: flex;              /* Flex 사용 */
+            flex-direction: row;        /* 가로 방향 정렬 */
+            align-items: center;        /* 수직 중앙 정렬 (글자와 커서 높이 맞춤) */
+            flex-wrap: nowrap;          /* 절대 줄바꿈 금지 */
+            
+            width: 100%;
             margin-bottom: 6px;
-            word-break: break-all;
             font-size: 16px;
             line-height: 1.6;
             color: var(--fg-color);
         }
 
-        /* 프롬프트 스타일 */
+        /* [핵심 수정] 프롬프트 영역 */
         .prompt {
-            white-space: pre;
-            margin-right: 12px;
-            flex-shrink: 0;
+            white-space: pre;           /* 공백 유지 */
+            margin-right: 12px;         /* 명령어와의 간격 */
+            flex-shrink: 0;             /* 화면이 좁아져도 프롬프트는 찌그러지지 않음 */
+            width: auto;                /* 내용만큼만 너비 차지 */
+            display: inline-block;
         }
-        .p-user { color: var(--prompt-user); } /* 변수로 교체 */
+        
+        .p-user { color: var(--prompt-user); }
         .p-sep { color: var(--prompt-sep); }
         .p-sym { color: var(--prompt-sym); }
 
+        /* ls -l 등의 텍스트 내용 */
         .content {
-            flex-grow: 1;
+            flex-grow: 0;
+            white-space: pre-wrap; /* 필요하면 줄바꿈 허용 */
         }
 
-        /* 커서 깜빡임 효과 */
+        /* 파일 리스트 */
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            margin-bottom: 20px;
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .file-row {
+            display: flex;
+            flex-direction: row;       /* 가로 정렬 명시 */
+            align-items: center;       /* 수직 중앙 정렬 */
+            justify-content: flex-start;
+            padding: 4px 0;
+            width: 100%;
+        }
+
+        .file-meta {
+            color: var(--meta-color);
+            font-size: 0.85em;
+            margin-right: 15px;
+            white-space: nowrap;
+            min-width: 120px; 
+            text-align: left;
+        }
+
+        a.file-link {
+            color: var(--link-color);
+            text-decoration: none;
+            font-weight: bold;
+        }
+        a.file-link:hover {
+            color: var(--typing-color);
+            text-decoration: underline;
+        }
+
+        /* 커서 블록 */
         .cursor-block {
             display: inline-block;
             width: 0.6em;
             height: 1.2em;
             background-color: var(--typing-color);
-            vertical-align: middle;
+            vertical-align: middle; /* 텍스트 중간에 맞춤 */
             animation: blink 0.9s infinite;
-            margin-left: 2px;
         }
 
         @keyframes blink {
@@ -97,7 +139,8 @@
         }
 
         @media (max-width: 480px) {
-            .line { font-size: 14px; }
+            .line, .file-row { font-size: 14px; }
+            .file-meta { display: none; }
             #terminal-container { padding-left: 15px; padding-right: 15px; }
         }
     </style>
@@ -107,27 +150,26 @@
 <div id="terminal-container">
     <div id="terminal-content">
         
+        <!-- Line 1: 프롬프트 + 명령어 -->
         <div class="line">
-            <span class="prompt">
-                <span class="p-user">user</span><span class="p-sep"> >> </span><span class="p-sym">$</span>
-            </span>
-            <span class="content completed">ls -l</span>
+            <span class="prompt"><span class="p-user">0+0@roro</span> <span class="p-sep">>></span> <span class="p-sym">$</span></span><span class="content">ls -l</span>
         </div>
 
-        <div class="line">
-            <span class="content">
-                <a href="roro_v06.html">0+0_roro</a>
-                <a href="bonhyeok.html">bonhyeok</a>
-            </span>
+        <!-- File List -->
+        <div class="file-list">
+            <div class="file-row">
+                <span class="file-meta">-rwxr-xr-x 1 roro</span>
+                <a href="roro_v06.html" class="file-link">0+0_roro.sh</a>
+            </div>
+            <div class="file-row">
+                <span class="file-meta">-rwxr-xr-x 1 roro</span>
+                <a href="bonhyeok.html" class="file-link">bonhyeok.sh</a>
+            </div>
         </div>
 
+        <!-- Line 3: 프롬프트 + 커서 -->
         <div class="line">
-            <span class="prompt">
-                <span class="p-user">user</span><span class="p-sep"> >> </span><span class="p-sym">$</span>
-            </span>
-            <span class="content">
-                <span class="cursor-block"></span>
-            </span>
+            <span class="prompt"><span class="p-user">0+0@roro</span> <span class="p-sep">>></span> <span class="p-sym">$</span></span><span class="cursor-block"></span>
         </div>
 
     </div>
